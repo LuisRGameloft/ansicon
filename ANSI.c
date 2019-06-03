@@ -223,6 +223,12 @@
   v1.87, 3 February, 2019:
     some hooked functions are not imported, so myimport wasn't set;
     add missing SetCurrentConsoleFontEx to list of hooks.
+
+  v1.88, 1 March, 2019:
+    a detached process has no console handle (fixes set_ansicon).
+
+  v1.89, 29 April, 2019:
+    an eight-digit window handle would break my custom printf.
 */
 
 #include "ansicon.h"
@@ -536,26 +542,14 @@ void get_state( void )
     csbix.cbSize = sizeof(csbix);
     if (GetConsoleScreenBufferInfoX( hConOut, &csbix ))
     {
-      Info.dwSize = csbix.dwSize;
-      ATTR = csbix.wAttributes;
-      WIN  = csbix.srWindow;
       arrcpy( pState->o_palette, csbix.ColorTable );
+      ATTR = csbix.wAttributes;
     }
     else
     {
       arrcpy( pState->o_palette, legacy_palette );
       if (!GetConsoleScreenBufferInfo( hConOut, &Info ))
-      {
-	DEBUGSTR( 1, "Failed to get screen buffer info (%u) - assuming defaults",
-		     GetLastError() );
-	ATTR	= 7;
-	WIDTH	= 80;
-	HEIGHT	= 300;
-	WIN.Left = 0;
-	WIN.Right = 79;
-	TOP	= 0;
-	BOTTOM	= 24;
-      }
+	ATTR = 7;
     }
     arrcpy( pState->x_palette, xterm_palette );
 
@@ -575,7 +569,10 @@ void get_state( void )
 				      FILE_SHARE_READ | FILE_SHARE_WRITE,
 				      NULL, OPEN_EXISTING, 0, NULL );
     if (!GetConsoleScreenBufferInfo( hConOut, &Info ))
+    {
+      RtlZeroMemory( &Info, sizeof(Info) );
       ATTR = 7;
+    }
     if (pState->sgr.reverse)
     {
       *a++ = '-';
@@ -3874,7 +3871,8 @@ void set_ansicon( PCONSOLE_SCREEN_BUFFER_INFO pcsbi )
     hConOut = CreateFile( L"CONOUT$", GENERIC_READ | GENERIC_WRITE,
 				      FILE_SHARE_READ | FILE_SHARE_WRITE,
 				      NULL, OPEN_EXISTING, 0, NULL );
-    GetConsoleScreenBufferInfo( hConOut, &csbi );
+    if (!GetConsoleScreenBufferInfo( hConOut, &csbi ))
+      RtlZeroMemory( &csbi, sizeof(csbi) );
     CloseHandle( hConOut );
     pcsbi = &csbi;
   }
